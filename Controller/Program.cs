@@ -12,6 +12,8 @@ using IniParser;
 using DirectShowLib.DES;
 using DirectShowLib;
 using System.Runtime.InteropServices;
+using System.Volume;
+using System.Net;
 
 namespace Controller
 {
@@ -26,10 +28,11 @@ namespace Controller
 
         static bool isStoped = false;
         static int index = 1;
+        static UdpClient client;
 
         static async void Start()
         {
-            var client = new UdpClient(int.Parse(AppSettings["Port"]));
+            client = new UdpClient(int.Parse(AppSettings["Port"]));
             var path = AppSettings["EasyPlayer"];
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -39,6 +42,7 @@ namespace Controller
                 path += "\\";
 
             CreateVideoUdp(path);
+            //ListeningVolumeChange();
 
             while (true)
             {
@@ -87,10 +91,8 @@ namespace Controller
                                 else
                                     Process.Start(path + "Play.exe");
                             }
-
                             isStoped = false;
-
-                            Send(AppSettings["StartPlay"]);
+                            SendCommandBySerialPort(AppSettings["StartPlay"]);
                             break;
                         case "pause":
                             Process.Start(path + "Pause.exe");
@@ -99,18 +101,45 @@ namespace Controller
                             isStoped = true;
                             Process.Start(path + "Stop.exe");
                             break;
+                        case "volume":
+                            byte[] send = null;
+                            if (int.TryParse(value, out int volume))
+                            {
+                                if (volume < 0)
+                                {
+                                    //静音或取消静音
+                                    VolumeHelper.Current.IsMute = !VolumeHelper.Current.IsMute;
+                                    if (VolumeHelper.Current.IsMute)
+                                        send = Encoding.UTF8.GetBytes("volume:0");
+                                }
+                                else if (volume <= 100)
+                                {
+                                    VolumeHelper.Current.IsMute = false;
+                                    VolumeHelper.Current.MasterVolume = volume;
+                                }
+                            }
+                            if (send == null)
+                                send = Encoding.UTF8.GetBytes("volume:" + VolumeHelper.Current.MasterVolume);
+                            client.Send(send, send.Length, r.RemoteEndPoint);
+                            break;
                         case "volume-":
-                            Process.Start(path + "VolumeDown.exe");
+                            VolumeHelper.Current.MasterVolume -= 2;
+                            send = Encoding.UTF8.GetBytes("volume:" + VolumeHelper.Current.MasterVolume);
+                            client.Send(send, send.Length, r.RemoteEndPoint);
+                            //Process.Start(path + "VolumeDown.exe");
                             break;
                         case "volume+":
-                            Process.Start(path + "VolumeUp.exe");
+                            VolumeHelper.Current.MasterVolume += 2;
+                            send = Encoding.UTF8.GetBytes("volume:" + VolumeHelper.Current.MasterVolume);
+                            client.Send(send, send.Length, r.RemoteEndPoint);
+                            //Process.Start(path + "VolumeUp.exe");
                             break;
                         //case "start":
                         //    Send(AppSettings["StartPlay"]);
                         //    break;
                         case "end":
                             isStoped = true;
-                            Send(AppSettings["OnStoped"]);
+                            SendCommandBySerialPort(AppSettings["OnStoped"]);
                             break;
                     }
                     Console.WriteLine("{0} {1}", DateTime.Now.ToString("HH:MM:ss.fff"), cmd);
@@ -120,7 +149,8 @@ namespace Controller
             }
         }
 
-        static void Send(string data)
+
+        static void SendCommandBySerialPort(string data)
         {
             if (string.IsNullOrWhiteSpace(AppSettings["Com"]) || string.IsNullOrWhiteSpace(data))
                 return;
