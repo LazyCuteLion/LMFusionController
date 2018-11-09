@@ -26,7 +26,7 @@ namespace Controller
             Console.ReadLine();
         }
 
-        static bool isStoped = false;
+        static bool isStoped = true;
         static int index = 1;
         static UdpClient client;
 
@@ -34,14 +34,15 @@ namespace Controller
         {
             client = new UdpClient(int.Parse(AppSettings["Port"]));
             var path = AppSettings["EasyPlayer"];
+           
             if (string.IsNullOrWhiteSpace(path))
             {
                 path = AppDomain.CurrentDomain.BaseDirectory;
             }
             if (!path.EndsWith("\\"))
                 path += "\\";
-
             CreateVideoUdp(path);
+
             //ListeningVolumeChange();
 
             while (true)
@@ -92,7 +93,7 @@ namespace Controller
                                     Process.Start(path + "Play.exe");
                             }
                             isStoped = false;
-                            SendCommandBySerialPort(AppSettings["StartPlay"]);
+                            SendCommandBySerialPort(AppSettings["OnPlaying"]);
                             break;
                         case "pause":
                             Process.Start(path + "Pause.exe");
